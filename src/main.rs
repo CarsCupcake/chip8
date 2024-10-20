@@ -1,3 +1,5 @@
+pub mod screen;
+
 use core::convert::*;
 use phf::*;
 use std::vec::Vec;
@@ -11,14 +13,16 @@ pub static mut RUNNING: bool = false;
 pub static SOUND_TIMER: u16 = 0;
 pub const PROGRAM_TIME: time::Duration = time::Duration::from_millis(16);
 pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
+    0u8 => clear_screen,
     1u8 => jump,
     3u8 => equals,
     4u8 => not_equals,
     5u8 => equal_registers,
     6u8 => set,
     7u8 => add,
+    8u8 => math_instruction,
     9u8 => not_equal_registers,
-    8u8 => math_instruction
+    10u8 => i_register_interaction
 };
 pub static mut MEMORY: [u8; 4096] = [0; 4096];
 pub static mut REGISTERS: [u8; 16] = [0; 16];
@@ -73,6 +77,9 @@ fn run() -> JoinHandle<()> {
             p += 1;
         }
     }
+    let _screen_thread = thread::spawn(|| {
+        screen::main();
+    });
     let program_thread = thread::spawn(|| {
         let mut pointer = 512u16;
         loop {
@@ -108,6 +115,13 @@ fn run() -> JoinHandle<()> {
         }
     });
     program_thread
+}
+
+fn i_register_interaction(pointer: u16) -> u16 {
+    unsafe {
+        REGISTER_I = read_nnn(pointer);
+    }
+    pointer
 }
 
 fn set(pointer: u16) -> u16 {
@@ -191,6 +205,13 @@ fn math_instruction(pointer: u16) -> u16 {
 }
 
 fn clear_screen(pointer: u16) -> u16 {
+    if read_y(pointer) == u4!(0xE) {
+        //Clear screen
+        unsafe {
+            screen::SCREEN = [[false; 32]; 64];
+            screen::update_screen();
+        }
+    }
     pointer
 }
 
