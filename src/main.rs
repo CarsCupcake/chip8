@@ -12,27 +12,69 @@ pub static SOUND_TIMER: u16 = 0;
 pub const PROGRAM_TIME: time::Duration = time::Duration::from_millis(16);
 pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
     1u8 => jump,
+    3u8 => equals,
+    4u8 => not_equals,
+    5u8 => equal_registers,
+    6u8 => set,
+    7u8 => add,
+    9u8 => not_equal_registers,
     8u8 => math_instruction
 };
 pub static mut MEMORY: [u8; 4096] = [0; 4096];
 pub static mut REGISTERS: [u8; 16] = [0; 16];
+pub static mut REGISTER_I: u16 = 0;
+pub fn read_register(index: usize) -> u8 {
+    unsafe { REGISTERS[index] }
+}
+pub fn read_memory(index: usize) -> u8 {
+    unsafe { MEMORY[index] }
+}
+pub fn write_register(index: usize, value: u8) {
+    unsafe {
+        REGISTERS[index] = value;
+    }
+}
+pub fn write_memory(index: usize, value: u8) {
+    unsafe {
+        MEMORY[index] = value;
+    }
+}
 
 fn main() {
-    unsafe {
-        MEMORY[100] = 0b0001_0000_u8;
-        MEMORY[101] = 2
-    }
-
     let _ = run().join();
 }
 
 fn run() -> JoinHandle<()> {
     unsafe {
-        assert_eq!(RUNNING, false);
+        assert!(!RUNNING);
         RUNNING = true;
+        //Initiating Font in memory
+        let font: [u8; 80] = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+        ];
+        let mut p = 0x050usize;
+        for i in font {
+            write_memory(p, i);
+            p += 1;
+        }
     }
     let program_thread = thread::spawn(|| {
-        let mut pointer = 0u16;
+        let mut pointer = 512u16;
         loop {
             unsafe {
                 if pointer as usize >= MEMORY.len() {
@@ -66,6 +108,17 @@ fn run() -> JoinHandle<()> {
         }
     });
     program_thread
+}
+
+fn set(pointer: u16) -> u16 {
+    write_register(read_x(pointer).into(), read_nn(pointer));
+    pointer
+}
+
+fn add(pointer: u16) -> u16 {
+    let x: usize = read_x(pointer).into();
+    write_register(x, read_register(x) + read_nn(pointer));
+    pointer
 }
 
 fn math_instruction(pointer: u16) -> u16 {
@@ -141,6 +194,42 @@ fn clear_screen(pointer: u16) -> u16 {
     pointer
 }
 
+fn equals(pointer: u16) -> u16 {
+    let x: usize = read_x(pointer).into();
+    let nn = read_nn(pointer);
+    if read_register(x) == nn {
+        pointer + 2
+    } else {
+        pointer
+    }
+}
+
+fn not_equals(pointer: u16) -> u16 {
+    let x: usize = read_x(pointer).into();
+    let nn = read_nn(pointer);
+    if read_register(x) != nn {
+        pointer + 2
+    } else {
+        pointer
+    }
+}
+
+fn equal_registers(pointer: u16) -> u16 {
+    if read_register(read_x(pointer).into()) == read_register(read_y(pointer).into()) {
+        pointer + 2
+    } else {
+        pointer
+    }
+}
+
+fn not_equal_registers(pointer: u16) -> u16 {
+    if read_register(read_x(pointer).into()) != read_register(read_y(pointer).into()) {
+        pointer + 2
+    } else {
+        pointer
+    }
+}
+
 fn jump(pointer: u16) -> u16 {
     read_nnn(pointer) - 2
 }
@@ -202,19 +291,19 @@ mod tests {
         unsafe {
             REGISTERS[0] = 2;
             REGISTERS[1] = 1;
-            MEMORY[0] = 0b1000_0000_u8;
-            MEMORY[1] = 0b0001_0101_u8;
-            MEMORY[2] = 0b0001_1111_u8;
-            MEMORY[3] = 0b1010_0000_u8;
+            MEMORY[512] = 0b1000_0000_u8;
+            MEMORY[513] = 0b0001_0101_u8;
+            MEMORY[514] = 0b0001_1111_u8;
+            MEMORY[515] = 0b1110_0000_u8;
             let _ = run().join();
             assert_eq!(REGISTERS[0], 1);
             assert_eq!(REGISTERS[15], 1);
             REGISTERS[0] = 2;
             REGISTERS[1] = 1;
-            MEMORY[0] = 0b1000_0000_u8;
-            MEMORY[1] = 0b0001_0111_u8;
-            MEMORY[2] = 0b0001_1111_u8;
-            MEMORY[3] = 0b1010_0000_u8;
+            MEMORY[512] = 0b1000_0000_u8;
+            MEMORY[513] = 0b0001_0111_u8;
+            MEMORY[514] = 0b0001_1111_u8;
+            MEMORY[515] = 0b1110_0000_u8;
             let _ = run().join();
             assert_eq!(REGISTERS[0], 255);
             assert_eq!(REGISTERS[15], 0);
@@ -225,10 +314,10 @@ mod tests {
     fn bitshift() {
         unsafe {
             REGISTERS[1] = 1;
-            MEMORY[0] = 0b1000_0000_u8;
-            MEMORY[1] = 0b0001_1110_u8;
-            MEMORY[2] = 0b0001_1111_u8;
-            MEMORY[3] = 0b1010_0000_u8;
+            MEMORY[512] = 0b1000_0000_u8;
+            MEMORY[513] = 0b0001_1110_u8;
+            MEMORY[514] = 0b0001_1111_u8;
+            MEMORY[515] = 0b1110_0000_u8;
             let _ = run().join();
             assert_eq!(REGISTERS[0], 2);
             assert_eq!(REGISTERS[15], 0);
