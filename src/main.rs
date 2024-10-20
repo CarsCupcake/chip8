@@ -2,10 +2,32 @@ pub mod screen;
 
 use core::convert::*;
 use phf::*;
+use std::fmt;
+use std::fs::File;
+use std::io::Read;
 use std::vec::Vec;
 use std::*;
 use std::{thread, thread::JoinHandle, time};
 use u4::*;
+
+struct Array<T> {
+    data: [T; 4096],
+}
+
+struct VecFormat<T> {
+    data: Vec<T>,
+}
+impl<T: fmt::Debug> fmt::Debug for VecFormat<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.data[..].fmt(formatter)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for Array<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.data[..].fmt(formatter)
+    }
+}
 
 pub const PPROGRAM_STACK: Vec<u16> = Vec::new();
 pub static mut TIMER: u16 = 0;
@@ -22,9 +44,10 @@ pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
     7u8 => add,
     8u8 => math_instruction,
     9u8 => not_equal_registers,
-    10u8 => i_register_interaction
+    10u8 => i_register_interaction,
+    13u8 => draw
 };
-pub static mut MEMORY: [u8; 4096] = [0; 4096];
+pub static mut MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub static mut REGISTERS: [u8; 16] = [0; 16];
 pub static mut REGISTER_I: u16 = 0;
 pub fn read_register(index: usize) -> u8 {
@@ -45,6 +68,20 @@ pub fn write_memory(index: usize, value: u8) {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 2 {
+        let filename = args[1].clone();
+        for (i, byte) in File::open(&filename).expect("err").bytes().enumerate() {
+            write_memory(i + 0x200, byte.unwrap());
+        }
+        /*while i - 512 < buffer.len() {
+        write_memory(i, buffer[i - 512]);
+        i += 1;
+        }*/
+        unsafe {
+            println!("{:?}", Array { data: MEMORY });
+        }
+    }
     let _ = run().join();
 }
 
@@ -76,6 +113,11 @@ fn run() -> JoinHandle<()> {
             write_memory(p, i);
             p += 1;
         }
+        //REGISTER_I = 0x050;
+        //MEMORY[512] = 0xd0;
+        //MEMORY[513] = 0x14;
+        //MEMORY[514] = 0x1F;
+        //MEMORY[515] = 0xB0;
     }
     let _screen_thread = thread::spawn(|| {
         screen::main();
@@ -96,7 +138,7 @@ fn run() -> JoinHandle<()> {
                     .get(0)
                     .expect("Illegal Pointer")
                     .into();
-                println!("PC: {} Operation: {}", pointer, op_id);
+                //println!("PC: {} Operation: {}", pointer, op_id);
                 let opt_intruction = PROGRAM_INSTRUCTIONS.get(&op_id);
                 if let Some(instruction) = opt_intruction {
                     pointer = instruction(pointer);
@@ -115,6 +157,35 @@ fn run() -> JoinHandle<()> {
         }
     });
     program_thread
+}
+
+fn draw(pointer: u16) -> u16 {
+    unsafe {
+        let vx = read_register(read_x(pointer).into());
+        let vy = read_register(read_y(pointer).into());
+        write_register(15, 0);
+        let mut x = vx & 63;
+        let mut y = vy & 31;
+        let n: usize = read_n(pointer).into();
+        let mut i = 0usize;
+        while i < n || i < 63 {
+            let regp: usize = REGISTER_I.into();
+            let sprite_data = read_memory(regp + i);
+            let mut j = 0;
+            while j < 8 {
+                let on = sprite_data >> j & 1;
+                if screen::set_pixel(x, y, on == 1) && on == 0 {
+                    write_register(15, 1);
+                }
+                y += 1;
+                j += 1;
+            }
+            x += 1;
+            i += 1;
+        }
+    }
+    screen::update_screen();
+    pointer
 }
 
 fn i_register_interaction(pointer: u16) -> u16 {
@@ -208,7 +279,7 @@ fn clear_screen(pointer: u16) -> u16 {
     if read_y(pointer) == u4!(0xE) {
         //Clear screen
         unsafe {
-            screen::SCREEN = [[false; 32]; 64];
+            screen::SCREEN = [0u32; 2048];
             screen::update_screen();
         }
     }
