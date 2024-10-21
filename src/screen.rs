@@ -15,8 +15,8 @@ pub fn main() {
                 borderless: true,
                 title: true,
                 resize: false,
-                scale: Scale::X8,
-                scale_mode: ScaleMode::Center,
+                scale: Scale::X16,
+                scale_mode: ScaleMode::Stretch,
                 topmost: false,
                 transparency: false,
                 none: false,
@@ -39,10 +39,11 @@ pub fn update_screen() {
     }
 }
 
-pub fn set_pixel(x: u8, y: u8, on: bool) -> bool {
+pub fn set_pixel(mut x: u8, y: u8, on: bool) -> bool {
     unsafe {
-        let prev = SCREEN[(y * 64 + x) as usize];
-        SCREEN[(y * 64 + x) as usize] = if on { 0xFFFFFF } else { 0 };
+        x = 63 - x;
+        let prev = SCREEN[y as usize * 64 + x as usize];
+        SCREEN[y as usize * 64 + x as usize] = if on { 0xFFFFFF } else { 0 };
         prev == 0xFFFFFF
     }
 }

@@ -14,6 +14,10 @@ struct Array<T> {
     data: [T; 4096],
 }
 
+struct ScreenArray<T> {
+    data: [T; 2048],
+}
+
 struct VecFormat<T> {
     data: Vec<T>,
 }
@@ -24,6 +28,12 @@ impl<T: fmt::Debug> fmt::Debug for VecFormat<T> {
 }
 
 impl<T: fmt::Debug> fmt::Debug for Array<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        self.data[..].fmt(formatter)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for ScreenArray<T> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         self.data[..].fmt(formatter)
     }
@@ -82,10 +92,10 @@ fn main() {
             println!("{:?}", Array { data: MEMORY });
         }
     }
-    let _ = run().join();
+    let _ = run(args.len() == 2).join();
 }
 
-fn run() -> JoinHandle<()> {
+fn run(with_load_memory: bool) -> JoinHandle<()> {
     unsafe {
         assert!(!RUNNING);
         RUNNING = true;
@@ -109,15 +119,22 @@ fn run() -> JoinHandle<()> {
             0xF0, 0x80, 0xF0, 0x80, 0x80, // F
         ];
         let mut p = 0x050usize;
-        for i in font {
-            write_memory(p, i);
-            p += 1;
+        if !with_load_memory {
+            for i in font {
+                write_memory(p, i);
+                p += 1;
+            }
         }
         //REGISTER_I = 0x050;
         //MEMORY[512] = 0xd0;
         //MEMORY[513] = 0x14;
         //MEMORY[514] = 0x1F;
         //MEMORY[515] = 0xB0;
+        //write_register(0, 16);
+        //write_memory(512, 0xa0);
+        //write_memory(513, 0x5A);
+        //write_memory(514, 0xd0);
+        //write_memory(515, 0x05);
     }
     let _screen_thread = thread::spawn(|| {
         screen::main();
@@ -164,23 +181,24 @@ fn draw(pointer: u16) -> u16 {
         let vx = read_register(read_x(pointer).into());
         let vy = read_register(read_y(pointer).into());
         write_register(15, 0);
-        let mut x = vx & 63;
+        let ox = vx & 63;
         let mut y = vy & 31;
         let n: usize = read_n(pointer).into();
         let mut i = 0usize;
-        while i < n || i < 63 {
+        while i < n && y < 32 {
             let regp: usize = REGISTER_I.into();
             let sprite_data = read_memory(regp + i);
             let mut j = 0;
-            while j < 8 {
+            let mut x = ox;
+            while j < 8 && x < 64 {
                 let on = sprite_data >> j & 1;
                 if screen::set_pixel(x, y, on == 1) && on == 0 {
                     write_register(15, 1);
                 }
-                y += 1;
+                x += 1;
                 j += 1;
             }
-            x += 1;
+            y += 1;
             i += 1;
         }
     }
@@ -387,7 +405,7 @@ mod tests {
             MEMORY[513] = 0b0001_0101_u8;
             MEMORY[514] = 0b0001_1111_u8;
             MEMORY[515] = 0b1110_0000_u8;
-            let _ = run().join();
+            let _ = run(false).join();
             assert_eq!(REGISTERS[0], 1);
             assert_eq!(REGISTERS[15], 1);
             REGISTERS[0] = 2;
@@ -396,7 +414,7 @@ mod tests {
             MEMORY[513] = 0b0001_0111_u8;
             MEMORY[514] = 0b0001_1111_u8;
             MEMORY[515] = 0b1110_0000_u8;
-            let _ = run().join();
+            let _ = run(false).join();
             assert_eq!(REGISTERS[0], 255);
             assert_eq!(REGISTERS[15], 0);
         }
@@ -410,7 +428,7 @@ mod tests {
             MEMORY[513] = 0b0001_1110_u8;
             MEMORY[514] = 0b0001_1111_u8;
             MEMORY[515] = 0b1110_0000_u8;
-            let _ = run().join();
+            let _ = run(false).join();
             assert_eq!(REGISTERS[0], 2);
             assert_eq!(REGISTERS[15], 0);
         }
