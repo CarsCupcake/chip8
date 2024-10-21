@@ -1,7 +1,11 @@
+pub mod input;
 pub mod screen;
 
 use core::convert::*;
+use input::{await_key, to_key};
+use minifb::*;
 use phf::*;
+use std::collections::VecDeque;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -39,14 +43,15 @@ impl<T: fmt::Debug> fmt::Debug for ScreenArray<T> {
     }
 }
 
-pub const PPROGRAM_STACK: Vec<u16> = Vec::new();
+pub static mut PPROGRAM_STACK: VecDeque<u16> = VecDeque::new();
 pub static mut TIMER: u16 = 0;
 pub static mut RUNNING: bool = false;
 pub static SOUND_TIMER: u16 = 0;
-pub const PROGRAM_TIME_60HZ: time::Duration = time::Duration::from_nanos(1666666666);
+pub const PROGRAM_TIME_60HZ: time::Duration = time::Duration::from_nanos(16666666);
 pub const PROGRAM_TIME_7000_INSTR_PM: time::Duration = time::Duration::from_nanos(1428571);
 pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
     0u8 => clear_screen,
+    2u8 => subroutine,
     1u8 => jump,
     3u8 => equals,
     4u8 => not_equals,
@@ -56,7 +61,11 @@ pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
     8u8 => math_instruction,
     9u8 => not_equal_registers,
     10u8 => i_register_interaction,
-    13u8 => draw
+    11u8 => jump_with_offset,
+    12u8 => random,
+    13u8 => draw,
+    14u8 => key_input,
+    15u8 => f_instructions,
 };
 pub static mut MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub static mut REGISTERS: [u8; 16] = [0; 16];
@@ -182,6 +191,104 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
     program_thread
 }
 
+fn f_instructions(pointer: u16) -> u16 {
+    unsafe {
+        let op_type = read_nn(pointer);
+        match op_type {
+            0x1E => {
+                REGISTER_I += read_register(read_x(pointer).into()) as u16;
+            }
+            0x0A => {
+                let key = input::to_key(AsNibbles([read_x(pointer).into()]).get(1).expect(""));
+                await_key(key);
+            }
+            0x29 => {
+                let key: u16 = AsNibbles([read_x(pointer).into()]).get(1).expect("").into();
+                REGISTER_I = 0x50 + (5 * key);
+            }
+            0x55 => {
+                let x: usize = read_x(pointer).into();
+                let mut i = 0;
+                while i <= x {
+                    write_memory(REGISTER_I as usize + i, read_register(i));
+                    i += 1;
+                }
+            }
+            0x65 => {
+                let x: usize = read_x(pointer).into();
+                let mut i = 0;
+                while i <= x {
+                    write_register(i, read_memory(REGISTER_I as usize + i));
+                    i += 1;
+                }
+            }
+            0x33 => {
+                let vx = read_register(read_x(pointer).into());
+                let hundreds = vx / 100;
+                let tens = vx / 10 - hundreds * 10;
+                let ones = vx - hundreds * 100 - tens * 10;
+                write_memory(REGISTER_I as usize, hundreds);
+                write_memory(REGISTER_I as usize + 1, tens);
+                write_memory(REGISTER_I as usize + 2, ones);
+            }
+            _ => {}
+        }
+        pointer
+    }
+}
+
+fn key_input(pointer: u16) -> u16 {
+    unsafe {
+        let op_type = read_nn(pointer);
+        match op_type {
+            0x9E => {
+                let reg = read_register(read_x(pointer).into());
+                let key = input::to_key(AsNibbles([reg]).get(1).expect(""));
+                if screen::WINDOW
+                    .as_ref()
+                    .expect("")
+                    .is_key_pressed(key, KeyRepeat::No)
+                {
+                    return pointer + 2;
+                }
+                pointer
+            }
+            0xA1 => {
+                let reg = read_register(read_x(pointer).into());
+                let key = input::to_key(AsNibbles([reg]).get(1).expect(""));
+                if !screen::WINDOW
+                    .as_ref()
+                    .expect("")
+                    .is_key_pressed(key, KeyRepeat::No)
+                {
+                    return pointer + 2;
+                }
+                pointer
+            }
+            _ => panic!("Illegal key operation"),
+        }
+    }
+}
+
+fn random(pointer: u16) -> u16 {
+    let upper: u8 = read_nn(pointer);
+    let random: u8 = rand::random();
+    write_register(read_x(pointer).into(), (random & upper) as u8);
+    pointer
+}
+
+fn jump_with_offset(pointer: u16) -> u16 {
+    let jum_offstet = read_nnn(pointer);
+    (jum_offstet + read_register(0) as u16) - 2
+}
+
+fn subroutine(pointer: u16) -> u16 {
+    unsafe {
+        PPROGRAM_STACK.push_back(pointer);
+        read_nnn(pointer)
+    }
+}
+
 fn draw(pointer: u16) -> u16 {
     unsafe {
         let vx = read_register(read_x(pointer).into());
@@ -302,8 +409,19 @@ fn clear_screen(pointer: u16) -> u16 {
     if read_y(pointer) == u4!(0xE) {
         //Clear screen
         unsafe {
-            screen::SCREEN = [0u32; 2048];
-            screen::update_screen();
+            let opt_type = read_nn(pointer);
+            match opt_type {
+                0xE0 => {
+                    screen::SCREEN = [0u32; 2048];
+                    screen::update_screen();
+                }
+                0xEE => {
+                    return PPROGRAM_STACK.pop_front().expect("Illegal subroutine call") - 2;
+                }
+                _ => {
+                    panic!("Illegal operation");
+                }
+            }
         }
     }
     pointer
