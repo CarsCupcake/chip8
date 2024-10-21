@@ -1,6 +1,6 @@
 This project following this guide: https://tobiasvl.github.io/blog/write-a-chip-8-emulator/
 
-#Missing instructions:
+# Missing instructions:
 
 | instructions | Explanation |
 | -------------- | --------------- |
@@ -15,5 +15,5 @@ This project following this guide: https://tobiasvl.github.io/blog/write-a-chip-
 | FX33 | Binary-coded decimal conversion |
 | FX55 and FX65 | Store and load memory |
 
-#Other Plans:
+# Other Plans:
 - Make a lang and compile it to chip8 instructions.
