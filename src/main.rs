@@ -43,7 +43,8 @@ pub const PPROGRAM_STACK: Vec<u16> = Vec::new();
 pub static mut TIMER: u16 = 0;
 pub static mut RUNNING: bool = false;
 pub static SOUND_TIMER: u16 = 0;
-pub const PROGRAM_TIME: time::Duration = time::Duration::from_millis(16);
+pub const PROGRAM_TIME_60HZ: time::Duration = time::Duration::from_nanos(1666666666);
+pub const PROGRAM_TIME_7000_INSTR_PM: time::Duration = time::Duration::from_nanos(1428571);
 pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
     0u8 => clear_screen,
     1u8 => jump,
@@ -138,6 +139,11 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
     }
     let _screen_thread = thread::spawn(|| {
         screen::main();
+
+        loop {
+            thread::sleep(PROGRAM_TIME_60HZ);
+            screen::update_screen();
+        }
     });
     let program_thread = thread::spawn(|| {
         let mut pointer = 512u16;
@@ -146,7 +152,7 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
                 if pointer as usize >= MEMORY.len() {
                     RUNNING = !RUNNING;
                 }
-                thread::sleep(PROGRAM_TIME);
+                thread::sleep(PROGRAM_TIME_7000_INSTR_PM);
                 //Main Program Loop
                 if !RUNNING {
                     break;
@@ -165,7 +171,7 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
         }
     });
     let _sound_thread = thread::spawn(|| loop {
-        thread::sleep(PROGRAM_TIME);
+        thread::sleep(PROGRAM_TIME_60HZ);
         unsafe {
             TIMER = TIMER.saturating_sub(1);
             if !RUNNING {
@@ -202,7 +208,6 @@ fn draw(pointer: u16) -> u16 {
             i += 1;
         }
     }
-    screen::update_screen();
     pointer
 }
 
