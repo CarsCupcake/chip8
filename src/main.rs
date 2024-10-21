@@ -554,6 +554,40 @@ mod tests {
             let _ = run(false).join();
             assert_eq!(REGISTERS[0], 2);
             assert_eq!(REGISTERS[15], 0);
+
+            REGISTERS[1] = 0xFF;
+            MEMORY[512] = 0b1000_0000_u8;
+            MEMORY[513] = 0b0001_1110_u8;
+            MEMORY[514] = 0b0001_1111_u8;
+            MEMORY[515] = 0b1110_0000_u8;
+            let _ = run(false).join();
+            assert_eq!(REGISTERS[0], 0b1111_1110_u8);
+            assert_eq!(REGISTERS[15], 1);
+
+            REGISTERS[1] = 1;
+            MEMORY[512] = 0x80;
+            MEMORY[513] = 0x16;
+            MEMORY[514] = 0b0001_1111_u8;
+            MEMORY[515] = 0b1110_0000_u8;
+            let _ = run(false).join();
+            assert_eq!(REGISTERS[0], 0);
+            assert_eq!(REGISTERS[15], 1);
         }
+        subroutine_test();
+    }
+
+    fn subroutine_test() {
+        write_memory(512, 0x22);
+        write_memory(513, 0x58);
+        write_memory(514, 0x60);
+        write_memory(515, 0x02);
+        write_memory(516, 0x1F);
+        write_memory(517, 0xFC);
+        write_memory(600, 0x61);
+        write_memory(601, 0x01);
+        write_memory(602, 0x00);
+        write_memory(603, 0xEE);
+        assert_eq!(read_register(0), 1);
+        assert_eq!(read_register(1), 2);
     }
 }
