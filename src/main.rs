@@ -305,7 +305,7 @@ fn jump_with_offset(pointer: u16) -> u16 {
 
 fn subroutine(pointer: u16) -> u16 {
     unsafe {
-        PPROGRAM_STACK.push_back(pointer);
+        PPROGRAM_STACK.push_front(pointer);
         read_nnn(pointer) - 2
     }
 }
@@ -523,6 +523,12 @@ fn read_nnn(pointer: u16) -> u16 {
     unsafe { ((first << 8) + MEMORY[(pointer + 1) as usize] as u16) as u16 }
 }
 
+fn whipe_memory() {
+    unsafe {
+        MEMORY = [0; 4096];
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -611,5 +617,92 @@ mod tests {
         let _ = run(false).join();
         assert_eq!(read_register(0), 2);
         assert_eq!(read_register(1), 1);
+        shr();
+    }
+
+    fn shr() {
+        println!("SHR test");
+        whipe_memory();
+        write_register(0, 2);
+        write_memory(512, 0x80);
+        write_memory(513, 0x06);
+        write_memory(516, 0x1F); // JUMP 4094
+        write_memory(517, 0xFC);
+
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 1);
+        assert_eq!(read_register(15), 0);
+
+        write_register(0, 3);
+        write_memory(512, 0x80);
+        write_memory(513, 0x06);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 1);
+        assert_eq!(read_register(15), 1);
+
+        write_register(0, 1);
+        write_memory(512, 0x80);
+        write_memory(513, 0x06);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 0);
+        assert_eq!(read_register(15), 1);
+        shl();
+    }
+
+    fn shl() {
+        println!("SHL test");
+        whipe_memory();
+        write_register(0, 0b0100_0000_u8);
+        write_memory(512, 0x80);
+        write_memory(513, 0x0E);
+        write_memory(516, 0x1F); // JUMP 4094
+        write_memory(517, 0xFC);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 0b1000_0000_u8);
+        assert_eq!(read_register(15), 0);
+
+        write_register(0, 0b1100_0000_u8);
+        write_memory(512, 0x80);
+        write_memory(513, 0x0E);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 0b1000_0000_u8);
+        assert_eq!(read_register(15), 1);
+
+        write_register(0, 0b1000_0000_u8);
+        write_memory(512, 0x80);
+        write_memory(513, 0x0E);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 0);
+        assert_eq!(read_register(15), 1);
+        math_or();
+    }
+
+    fn math_or() {
+        write_register(0, 1);
+        write_register(1, 2);
+        write_memory(512, 0x80);
+        write_memory(513, 0x11);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 3);
+        math_and();
+    }
+
+    fn math_and() {
+        write_register(0, 3);
+        write_register(1, 2);
+        write_memory(512, 0x80);
+        write_memory(513, 0x12);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 2);
+        math_xor();
+    }
+
+    fn math_xor() {
+        write_register(0, 3);
+        write_register(1, 2);
+        write_memory(512, 0x80);
+        write_memory(513, 0x13);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 1);
     }
 }
