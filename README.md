@@ -35,7 +35,7 @@ A language for my chip8 processor
 | 9XY0 | RNEQ x y |
 | ANNN | REGI i |
 | BNNN | OJMP i |
-| DXY0 | DRAW x y |
+| DXYN | DRAW x y i |
 | EX9E | KSKP x |
 | EXA1 | KNSKP x |
 | FX07 | REGT x |

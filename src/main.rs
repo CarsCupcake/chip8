@@ -92,6 +92,10 @@ pub fn write_memory(index: usize, value: u8) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() == 3 && (args[1] == "-c" || args[1] == "-compile") {
+        assembly::compile(&args[2].clone());
+        return;
+    }
     if args.len() == 2 {
         let filename = args[1].clone();
         for (i, byte) in File::open(&filename).expect("err").bytes().enumerate() {
