@@ -1,5 +1,6 @@
 pub mod input;
 pub mod screen;
+pub mod assembly;
 
 use core::convert::*;
 use input::{await_key, to_key};
@@ -47,7 +48,7 @@ impl<T: fmt::Debug> fmt::Debug for ScreenArray<T> {
 pub static mut PPROGRAM_STACK: VecDeque<u16> = VecDeque::new();
 pub static mut TIMER: u16 = 0;
 pub static mut RUNNING: bool = false;
-pub static SOUND_TIMER: u16 = 0;
+pub static mut SOUND_TIMER: u8 = 0;
 pub const PROGRAM_TIME_60HZ: time::Duration = time::Duration::from_nanos(16666666);
 pub const PROGRAM_TIME_7000_INSTR_PM: time::Duration = time::Duration::from_nanos(1428571);
 pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
@@ -71,6 +72,7 @@ pub const PROGRAM_INSTRUCTIONS: Map<u8, fn(u16) -> u16> = phf_map! {
 pub static mut MEMORY: [u8; 0x1000] = [0; 0x1000];
 pub static mut REGISTERS: [u8; 16] = [0; 16];
 pub static mut REGISTER_I: u16 = 0;
+pub static mut DELAY_TIMER: u8 = 0;
 pub fn read_register(index: usize) -> u8 {
     unsafe { REGISTERS[index] }
 }
@@ -169,7 +171,7 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
             });
         }
     }
-    let program_thread = thread::spawn(|| {
+    let program_thread = thread::spawn(move || {
         let mut pointer = 512u16;
         loop {
             unsafe {
@@ -183,15 +185,17 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
                 }
                 let pointer_nibbles = AsNibbles([MEMORY[pointer as usize]]);
                 let op_id = pointer_nibbles.get(0).expect("Illegal Pointer").into();
-                let nibble = AsNibbles([read_nn(pointer)]);
-                println!(
-                    "PC: {} Operation: {} {}:{}:{}",
-                    pointer,
-                    op_id,
-                    read_x(pointer),
-                    read_y(pointer),
-                    read_n(pointer)
-                );
+
+                if !with_load_memory {
+                    println!(
+                        "PC: {} Operation: {} {}:{}:{}",
+                        pointer,
+                        op_id,
+                        read_x(pointer),
+                        read_y(pointer),
+                        read_n(pointer)
+                    );
+                }
                 let opt_intruction = PROGRAM_INSTRUCTIONS.get(&op_id);
                 if let Some(instruction) = opt_intruction {
                     pointer = instruction(pointer);
@@ -203,6 +207,7 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
     let _sound_thread = thread::spawn(|| loop {
         thread::sleep(PROGRAM_TIME_60HZ);
         unsafe {
+            DELAY_TIMER.saturating_sub(1);
             TIMER = TIMER.saturating_sub(1);
             if !RUNNING {
                 break;
@@ -251,6 +256,15 @@ fn f_instructions(pointer: u16) -> u16 {
                 write_memory(REGISTER_I as usize, hundreds);
                 write_memory(REGISTER_I as usize + 1, tens);
                 write_memory(REGISTER_I as usize + 2, ones);
+            }
+            0x07 => {
+                write_register(read_x(pointer).into(), DELAY_TIMER);
+            }
+            0x15 => {
+                DELAY_TIMER = read_register(read_x(pointer).into());
+            }
+            0x18 => {
+                SOUND_TIMER = read_register(read_x(pointer).into());
             }
             _ => {}
         }

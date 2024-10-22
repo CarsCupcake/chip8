@@ -7,9 +7,7 @@ use crate::{screen, PROGRAM_TIME_60HZ};
 pub fn await_key(key: Key) {
     unsafe {
         let window_ref = screen::WINDOW.as_ref().expect("");
-        while !window_ref.is_key_pressed(key, KeyRepeat::No) {
-            thread::sleep(PROGRAM_TIME_60HZ);
-        }
+        while !window_ref.is_key_pressed(key, KeyRepeat::No) {}
     }
 }
 pub fn to_key(nibble: U4) -> Key {

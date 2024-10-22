@@ -12,7 +12,7 @@ pub fn main() {
             64,
             32,
             WindowOptions {
-                borderless: true,
+                borderless: false,
                 title: true,
                 resize: false,
                 scale: Scale::X16,
