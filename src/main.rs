@@ -5,6 +5,7 @@ use core::convert::*;
 use input::{await_key, to_key};
 use minifb::*;
 use phf::*;
+use screen::{SCREEN, WINDOW};
 use std::collections::VecDeque;
 use std::fmt;
 use std::fs::File;
@@ -101,6 +102,18 @@ fn main() {
         unsafe {
             println!("{:?}", Array { data: MEMORY });
         }
+    } else {
+        write_memory(0, 128);
+        write_memory(512, 0xA);
+        write_memory(514, 0x3);
+        write_memory(516, 0x7);
+        write_memory(517, 0x01);
+        write_memory(518, 0xD0);
+        write_memory(519, 0x11);
+        write_memory(520, 0x40);
+        write_memory(521, 63);
+        write_memory(522, 0x12);
+        write_memory(523, 0x08);
     }
     let _ = run(args.len() == 2).join();
 }
@@ -129,11 +142,9 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
             0xF0, 0x80, 0xF0, 0x80, 0x80, // F
         ];
         let mut p = 0x050usize;
-        if !with_load_memory {
-            for i in font {
-                write_memory(p, i);
-                p += 1;
-            }
+        for i in font {
+            write_memory(p, i);
+            p += 1;
         }
         //REGISTER_I = 0x050;
         //MEMORY[512] = 0xd0;
@@ -146,14 +157,18 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
         //write_memory(514, 0xd0);
         //write_memory(515, 0x05);
     }
-    let _screen_thread = thread::spawn(|| {
-        screen::main();
+    unsafe {
+        if WINDOW.is_none() {
+            let _screen_thread = thread::spawn(|| {
+                screen::main();
 
-        loop {
-            thread::sleep(PROGRAM_TIME_60HZ);
-            screen::update_screen();
+                loop {
+                    thread::sleep(PROGRAM_TIME_60HZ);
+                    screen::update_screen();
+                }
+            });
         }
-    });
+    }
     let program_thread = thread::spawn(|| {
         let mut pointer = 512u16;
         loop {
@@ -166,11 +181,17 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
                 if !RUNNING {
                     break;
                 }
-                let op_id = AsNibbles([MEMORY[pointer as usize]])
-                    .get(0)
-                    .expect("Illegal Pointer")
-                    .into();
-                //println!("PC: {} Operation: {}", pointer, op_id);
+                let pointer_nibbles = AsNibbles([MEMORY[pointer as usize]]);
+                let op_id = pointer_nibbles.get(0).expect("Illegal Pointer").into();
+                let nibble = AsNibbles([read_nn(pointer)]);
+                println!(
+                    "PC: {} Operation: {} {}:{}:{}",
+                    pointer,
+                    op_id,
+                    read_x(pointer),
+                    read_y(pointer),
+                    read_n(pointer)
+                );
                 let opt_intruction = PROGRAM_INSTRUCTIONS.get(&op_id);
                 if let Some(instruction) = opt_intruction {
                     pointer = instruction(pointer);
@@ -285,7 +306,7 @@ fn jump_with_offset(pointer: u16) -> u16 {
 fn subroutine(pointer: u16) -> u16 {
     unsafe {
         PPROGRAM_STACK.push_back(pointer);
-        read_nnn(pointer)
+        read_nnn(pointer) - 2
     }
 }
 
@@ -304,7 +325,7 @@ fn draw(pointer: u16) -> u16 {
             let mut j = 0;
             let mut x = ox;
             while j < 8 && x < 64 {
-                let on = sprite_data >> j & 1;
+                let on = sprite_data >> (7 - j) & 1;
                 if screen::set_pixel(x, y, on == 1) && on == 0 {
                     write_register(15, 1);
                 }
@@ -416,7 +437,7 @@ fn clear_screen(pointer: u16) -> u16 {
                     screen::update_screen();
                 }
                 0xEE => {
-                    return PPROGRAM_STACK.pop_front().expect("Illegal subroutine call") - 2;
+                    return PPROGRAM_STACK.pop_front().expect("Illegal subroutine call");
                 }
                 _ => {
                     panic!("Illegal operation");
@@ -577,17 +598,18 @@ mod tests {
     }
 
     fn subroutine_test() {
-        write_memory(512, 0x22);
+        write_memory(512, 0x22); // ROUT 600
         write_memory(513, 0x58);
-        write_memory(514, 0x60);
+        write_memory(514, 0x60); // SET 0 2
         write_memory(515, 0x02);
-        write_memory(516, 0x1F);
+        write_memory(516, 0x1F); // JUMP 4094
         write_memory(517, 0xFC);
-        write_memory(600, 0x61);
+        write_memory(600, 0x61); // SET 1 1
         write_memory(601, 0x01);
-        write_memory(602, 0x00);
+        write_memory(602, 0x00); // LASTROUT
         write_memory(603, 0xEE);
-        assert_eq!(read_register(0), 1);
-        assert_eq!(read_register(1), 2);
+        let _ = run(false).join();
+        assert_eq!(read_register(0), 2);
+        assert_eq!(read_register(1), 1);
     }
 }
