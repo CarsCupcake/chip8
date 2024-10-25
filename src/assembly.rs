@@ -49,7 +49,7 @@ let path = Path::new(filename);
     let mut texture = false;
     let mut comment = false;
     let empty_regex = Regex::new("\\s+").unwrap();
-    let end_comment_regex = Regex::new("\\*\\/").unwrap();
+    let end_comment_regex = Regex::new(r"\*/").unwrap();
     for mut s in read_to_string(&filename).unwrap().lines(){
         line += 1;
         if comment {

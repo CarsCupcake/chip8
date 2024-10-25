@@ -3,10 +3,10 @@ pub mod screen;
 pub mod assembly;
 
 use core::convert::*;
-use input::{await_key, to_key};
+use input::{await_key};
 use minifb::*;
 use phf::*;
-use screen::{SCREEN, WINDOW};
+use screen::{WINDOW};
 use std::collections::VecDeque;
 use std::fmt;
 use std::fs::File;
@@ -212,7 +212,7 @@ fn run(with_load_memory: bool) -> JoinHandle<()> {
     let _sound_thread = thread::spawn(|| loop {
         thread::sleep(PROGRAM_TIME_60HZ);
         unsafe {
-            DELAY_TIMER.saturating_sub(1);
+            let _ = DELAY_TIMER.saturating_sub(1);
             TIMER = TIMER.saturating_sub(1);
             if !RUNNING {
                 break;

@@ -8,11 +8,11 @@ overflow-checks = false
 
 [dependencies]
 rand = "0.8.5"
-phf = { version = "0.11", features = ["macros"] }
+phf = { version = "0.11.2", features = ["macros"] }
 u4 = "0.1.2"
-bytemuck = "1"
+bytemuck = "1.19.0"
 minifb = "0.27.0"
-regex = "1.11.0"
+regex = "1.11.1"
 
 [build]
 target = ["x86_64-unknown-linux-gnu", "wasm32-wasip1"]
