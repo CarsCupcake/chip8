@@ -1,0 +1,8 @@
+RSET 1 1
+DSET 0
+DRAW 0 0 5
+DSET 1
+DRAW 5 5 5 //Important comment here
+/*
+Multi line
+*/

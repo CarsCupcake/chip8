@@ -98,7 +98,8 @@ fn main() {
     }
     if args.len() == 2 {
         let filename = args[1].clone();
-        for (i, byte) in File::open(&filename).expect("err").bytes().enumerate() {
+        let byte_array = File::open(&filename).expect("err").bytes().enumerate();
+        for (i, byte) in byte_array {
             write_memory(i + 0x200, byte.unwrap());
         }
         /*while i - 512 < buffer.len() {

@@ -1,6 +1,8 @@
 use std::collections::btree_map::BTreeMap;
-use std::fs::*;
+use std::fs::{File, read_to_string, write, remove_file};
+use std::path::*;
 use regex::*;
+use crate::*;
 
 pub fn compile(filename: &str) {
     let mut tree_map: BTreeMap<&'static str, InstructionToken> = BTreeMap::new();
@@ -36,15 +38,17 @@ pub fn compile(filename: &str) {
     tree_map.insert("BCD", create_x(0xF, 0x33));
     tree_map.insert("WRITE", create_x(0xF, 0x55));
     tree_map.insert("READ", create_x(0xF, 0x65));
+let path = Path::new(filename);
+        let buff = path.with_extension("bin");
+    let _ = remove_file(buff.as_path());
 
-    let mut mem = [0u8; 0x1000];
-    let mut i = 512;
+    let mut mem = [0u8; 0x1000 - 0x200];
+    let mut i = 0;
     let mut line = 0;
     let mut texture_i = 0;
     let mut texture = false;
     let mut comment = false;
     let empty_regex = Regex::new("\\s+").unwrap();
-            texture_i + 1;
     let end_comment_regex = Regex::new("\\*\\/").unwrap();
     for mut s in read_to_string(&filename).unwrap().lines(){
         line += 1;
@@ -76,6 +80,7 @@ pub fn compile(filename: &str) {
             continue;
         }
         let mut split = split_keep(&empty_regex, s);
+        println!("{:?}", VecFormat{ data: split.clone() });
         if texture {
             for next in split {
                 let t: u8 = next.parse().expect("Not a valid u8");
@@ -84,9 +89,15 @@ pub fn compile(filename: &str) {
             }
             continue;
         }
+        if split.is_empty() {
+            continue;
+        }
         let instruction = split.remove(0);
         let mut veced: Vec<String> = Vec::new();
         for next in split {
+if next.starts_with("//") || next.starts_with("/*") {
+                    break;
+                }
             veced.push(next.to_string());
         }
         let in_op = tree_map.get(instruction);
@@ -101,7 +112,13 @@ pub fn compile(filename: &str) {
         let res = com(veced);
         mem[i] = res.0;
         mem[i + 1] = res.1;
-        i += 2;    }
+        i += 2;
+
+
+    }
+
+        let _ = File::create(buff.as_path());
+        let _ =write(buff.as_path(), mem);
 }
 struct InstructionToken {
     follow_tokens: usize,
@@ -187,14 +204,19 @@ fn split_keep<'a>(r: &Regex, text: &'a str) -> Vec<&'a str> {
     let mut last_cut = 0;
     loop {
         let capture_opt = split.next();
+        println!{"{:?}", capture_opt}
         if let Some(capture) = capture_opt {
             let cut = capture.get(0).unwrap().start();
+            println!{"{:?}", cut}
             result.push(&text[last_cut..cut]);
-            last_cut = cut;
+            last_cut = capture.get(0).unwrap().end();
 
         } else {
             break;
         }
+    }
+    if last_cut + 2 != text.len() {
+        result.push(&text[last_cut..text.len()])
     }
 
     result
